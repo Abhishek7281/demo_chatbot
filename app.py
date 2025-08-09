@@ -176,6 +176,7 @@ from nltk.stem import WordNetLemmatizer
 
 # Download NLTK data (only first run)
 nltk.download("punkt", quiet=True)
+nltk.download("punkt_tab", quiet=True)  # <-- Fix for your error
 nltk.download("wordnet", quiet=True)
 
 # File to store chat history
