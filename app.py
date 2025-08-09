@@ -39,87 +39,129 @@
 #     main()
 
 
-# Updated Streamlit Chatbot Code with Persistence & Basic NLP
+# # Updated Streamlit Chatbot Code with Persistence & Basic NLP
+# import streamlit as st
+# import os
+# import nltk
+# from nltk.tokenize import word_tokenize
+
+# # Download NLTK data (run once)
+# nltk.download('punkt')
+
+# HISTORY_FILE = "chat_history.txt"
+
+# def load_history():
+#     """Load chat history from file."""
+#     if os.path.exists(HISTORY_FILE):
+#         with open(HISTORY_FILE, "r", encoding="utf-8") as f:
+#             lines = f.readlines()
+#         # Each line: "User: message" or "Chatbot: message"
+#         history = []
+#         for line in lines:
+#             if ": " in line:
+#                 speaker, msg = line.strip().split(": ", 1)
+#                 history.append((speaker, msg))
+#         return history
+#     return []
+
+# def save_message(speaker, message):
+#     """Append a chat message to the history file."""
+#     with open(HISTORY_FILE, "a", encoding="utf-8") as f:
+#         f.write(f"{speaker}: {message}\n")
+
+# def chatbot_response(user_input):
+#     # Tokenize words to improve matching
+#     tokens = word_tokenize(user_input.lower())
+    
+#     greetings = {"hello", "hi", "hey", "greetings", "good morning", "good evening"}
+#     farewells = {"bye", "exit", "goodbye", "see you"}
+    
+#     if any(word in tokens for word in greetings):
+#         return "Hello! How can I help you today?"
+#     elif "help" in tokens:
+#         return "Sure! Tell me what you need help with."
+#     elif any(word in tokens for word in farewells):
+#         return "Goodbye! Have a nice day."
+#     else:
+#         return "I'm not sure I understand. Can you please rephrase?"
+
+# def main():
+#     st.title("AMD Simple Chatbot with Persistence & NLP")
+#     st.write("Welcome! Type your message below. Your chat history is saved between sessions.")
+
+#     if 'chat_history' not in st.session_state:
+#         st.session_state.chat_history = load_history()
+
+#     # Display existing chat history
+#     for speaker, message in st.session_state.chat_history:
+#         if speaker == "User":
+#             st.markdown(f"**You:** {message}")
+#         else:
+#             st.markdown(f"**Chatbot:** {message}")
+
+#     # User input
+#     user_input = st.text_input("You:")
+
+#     if st.button("Send") and user_input:
+#         # Generate bot response
+#         response = chatbot_response(user_input)
+
+#         # Update in-memory chat history
+#         st.session_state.chat_history.append(("User", user_input))
+#         st.session_state.chat_history.append(("Chatbot", response))
+
+#         # Save chat history persistently
+#         save_message("User", user_input)
+#         save_message("Chatbot", response)
+
+#         # Show new messages immediately
+#         st.markdown(f"**You:** {user_input}")
+#         st.markdown(f"**Chatbot:** {response}")
+
+#     st.write("---")
+#     st.info("Would you like me to help you integrate the chatbot with a database, add sentiment analysis, or support multi-turn conversations?")
+
+# if __name__ == "__main__":
+#     main()
+
+#Chatgpt1
 import streamlit as st
-import os
-import nltk
-from nltk.tokenize import word_tokenize
 
-# Download NLTK data (run once)
-nltk.download('punkt')
-
-HISTORY_FILE = "chat_history.txt"
-
-def load_history():
-    """Load chat history from file."""
-    if os.path.exists(HISTORY_FILE):
-        with open(HISTORY_FILE, "r", encoding="utf-8") as f:
-            lines = f.readlines()
-        # Each line: "User: message" or "Chatbot: message"
-        history = []
-        for line in lines:
-            if ": " in line:
-                speaker, msg = line.strip().split(": ", 1)
-                history.append((speaker, msg))
-        return history
-    return []
-
-def save_message(speaker, message):
-    """Append a chat message to the history file."""
-    with open(HISTORY_FILE, "a", encoding="utf-8") as f:
-        f.write(f"{speaker}: {message}\n")
-
+# Simple rule-based chatbot function
 def chatbot_response(user_input):
-    # Tokenize words to improve matching
-    tokens = word_tokenize(user_input.lower())
-    
-    greetings = {"hello", "hi", "hey", "greetings", "good morning", "good evening"}
-    farewells = {"bye", "exit", "goodbye", "see you"}
-    
-    if any(word in tokens for word in greetings):
+    user_input = user_input.lower()
+
+    if "hello" in user_input or "hi" in user_input:
         return "Hello! How can I help you today?"
-    elif "help" in tokens:
-        return "Sure! Tell me what you need help with."
-    elif any(word in tokens for word in farewells):
-        return "Goodbye! Have a nice day."
+    elif "how are you" in user_input:
+        return "I'm just a bot, but I'm doing great! How about you?"
+    elif "bye" in user_input:
+        return "Goodbye! Have a nice day!"
     else:
-        return "I'm not sure I understand. Can you please rephrase?"
+        return "I'm not sure I understand. Can you rephrase?"
 
-def main():
-    st.title("AMD Simple Chatbot with Persistence & NLP")
-    st.write("Welcome! Type your message below. Your chat history is saved between sessions.")
+# Streamlit UI
+st.set_page_config(page_title="Simple Chatbot", layout="centered")
+st.title("💬 Local Chatbot (No API)")
 
-    if 'chat_history' not in st.session_state:
-        st.session_state.chat_history = load_history()
+# Store chat history in session state
+if "messages" not in st.session_state:
+    st.session_state.messages = []
 
-    # Display existing chat history
-    for speaker, message in st.session_state.chat_history:
-        if speaker == "User":
-            st.markdown(f"**You:** {message}")
-        else:
-            st.markdown(f"**Chatbot:** {message}")
+# Chat input
+user_input = st.text_input("You:", key="user_input")
 
-    # User input
-    user_input = st.text_input("You:")
+if user_input:
+    # Add user message
+    st.session_state.messages.append(("You", user_input))
 
-    if st.button("Send") and user_input:
-        # Generate bot response
-        response = chatbot_response(user_input)
+    # Get bot response
+    bot_reply = chatbot_response(user_input)
+    st.session_state.messages.append(("Bot", bot_reply))
 
-        # Update in-memory chat history
-        st.session_state.chat_history.append(("User", user_input))
-        st.session_state.chat_history.append(("Chatbot", response))
-
-        # Save chat history persistently
-        save_message("User", user_input)
-        save_message("Chatbot", response)
-
-        # Show new messages immediately
-        st.markdown(f"**You:** {user_input}")
-        st.markdown(f"**Chatbot:** {response}")
-
-    st.write("---")
-    st.info("Would you like me to help you integrate the chatbot with a database, add sentiment analysis, or support multi-turn conversations?")
-
-if __name__ == "__main__":
-    main()
+# Display chat history
+for sender, message in st.session_state.messages:
+    if sender == "You":
+        st.markdown(f"**You:** {message}")
+    else:
+        st.markdown(f"**🤖 Bot:** {message}")
