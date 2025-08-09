@@ -125,39 +125,121 @@
 #     main()
 
 #Chatgpt1
+# import streamlit as st
+
+# # Simple rule-based chatbot function
+# def chatbot_response(user_input):
+#     user_input = user_input.lower()
+
+#     if "hello" in user_input or "hi" in user_input:
+#         return "Hello! How can I help you today?"
+#     elif "how are you" in user_input:
+#         return "I'm just a bot, but I'm doing great! How about you?"
+#     elif "bye" in user_input:
+#         return "Goodbye! Have a nice day!"
+#     else:
+#         return "I'm not sure I understand. Can you rephrase?"
+
+# # Streamlit UI
+# st.set_page_config(page_title="Simple Chatbot", layout="centered")
+# st.title("💬 Local Chatbot (No API)")
+
+# # Store chat history in session state
+# if "messages" not in st.session_state:
+#     st.session_state.messages = []
+
+# # Chat input
+# user_input = st.text_input("You:", key="user_input")
+
+# if user_input:
+#     # Add user message
+#     st.session_state.messages.append(("You", user_input))
+
+#     # Get bot response
+#     bot_reply = chatbot_response(user_input)
+#     st.session_state.messages.append(("Bot", bot_reply))
+
+# # Display chat history
+# for sender, message in st.session_state.messages:
+#     if sender == "You":
+#         st.markdown(f"**You:** {message}")
+#     else:
+#         st.markdown(f"**🤖 Bot:** {message}")
+
+#Chatgpt2: Persistance,nlp
 import streamlit as st
+import os
+import pickle
+import nltk
+from nltk.tokenize import word_tokenize
+from nltk.stem import WordNetLemmatizer
 
-# Simple rule-based chatbot function
+# Download NLTK data (only first run)
+nltk.download("punkt", quiet=True)
+nltk.download("wordnet", quiet=True)
+
+# File to store chat history
+CHAT_HISTORY_FILE = "chat_history.pkl"
+
+# Load chat history from file
+def load_history():
+    if os.path.exists(CHAT_HISTORY_FILE):
+        with open(CHAT_HISTORY_FILE, "rb") as f:
+            return pickle.load(f)
+    return []
+
+# Save chat history to file
+def save_history(history):
+    with open(CHAT_HISTORY_FILE, "wb") as f:
+        pickle.dump(history, f)
+
+# Basic NLP preprocessing
+lemmatizer = WordNetLemmatizer()
+
+def preprocess(text):
+    tokens = word_tokenize(text.lower())
+    return [lemmatizer.lemmatize(word) for word in tokens]
+
+# Simple intent-based responses
+responses = {
+    "greeting": ["hello", "hi", "hey"],
+    "bye": ["bye", "goodbye", "see you"],
+    "how_are_you": ["how", "you", "doing"],
+}
+
 def chatbot_response(user_input):
-    user_input = user_input.lower()
+    tokens = preprocess(user_input)
 
-    if "hello" in user_input or "hi" in user_input:
-        return "Hello! How can I help you today?"
-    elif "how are you" in user_input:
-        return "I'm just a bot, but I'm doing great! How about you?"
-    elif "bye" in user_input:
-        return "Goodbye! Have a nice day!"
+    if any(word in tokens for word in responses["greeting"]):
+        return "Hello! How can I assist you today?"
+    elif any(word in tokens for word in responses["how_are_you"]):
+        return "I'm doing great, thanks for asking! How about you?"
+    elif any(word in tokens for word in responses["bye"]):
+        return "Goodbye! Have a nice day."
     else:
-        return "I'm not sure I understand. Can you rephrase?"
+        return "Hmm, I’m not sure I understand. Can you explain that differently?"
 
-# Streamlit UI
-st.set_page_config(page_title="Simple Chatbot", layout="centered")
-st.title("💬 Local Chatbot (No API)")
+# --- Streamlit UI ---
+st.set_page_config(page_title="Persistent Chatbot", layout="centered")
+st.title("💬 Persistent NLP Chatbot (No API)")
 
-# Store chat history in session state
+# Load persistent history
 if "messages" not in st.session_state:
-    st.session_state.messages = []
+    st.session_state.messages = load_history()
 
-# Chat input
+# User input
 user_input = st.text_input("You:", key="user_input")
 
 if user_input:
     # Add user message
     st.session_state.messages.append(("You", user_input))
 
-    # Get bot response
+    # Generate bot reply
     bot_reply = chatbot_response(user_input)
     st.session_state.messages.append(("Bot", bot_reply))
+
+    # Save updated history
+    save_history(st.session_state.messages)
 
 # Display chat history
 for sender, message in st.session_state.messages:
@@ -165,3 +247,10 @@ for sender, message in st.session_state.messages:
         st.markdown(f"**You:** {message}")
     else:
         st.markdown(f"**🤖 Bot:** {message}")
+
+# Option to clear chat
+if st.button("Clear Chat History"):
+    st.session_state.messages = []
+    save_history([])
+    st.experimental_rerun()
+
