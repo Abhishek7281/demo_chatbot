@@ -4,67 +4,58 @@ import streamlit as st
 from transformers import AutoModelForCausalLM, AutoTokenizer
 import torch
 
-# ----------------- Settings -----------------
-MODEL_NAME = "microsoft/DialoGPT-small"  # small & faster for CPU
-DEVICE = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-
-# ----------------- Load Model -----------------
+# Load DialoGPT-small
 @st.cache_resource
 def load_model():
-    tokenizer = AutoTokenizer.from_pretrained(MODEL_NAME)
-    model = AutoModelForCausalLM.from_pretrained(MODEL_NAME).to(DEVICE)
+    tokenizer = AutoTokenizer.from_pretrained("microsoft/DialoGPT-small")
+    model = AutoModelForCausalLM.from_pretrained("microsoft/DialoGPT-small")
     return tokenizer, model
 
 tokenizer, model = load_model()
+DEVICE = "cuda" if torch.cuda.is_available() else "cpu"
+model = model.to(DEVICE)
 
-# ----------------- App UI -----------------
-st.set_page_config(page_title="🤖 Local Transformer Chatbot", layout="centered")
-st.title("🤖 Local Transformer Chatbot — Offline")
-st.write("Chat with a small local transformer model (DialoGPT-small) without internet or tokens.")
-
-if "chat_history" not in st.session_state:
-    st.session_state.chat_history = []
+# Session state for storing chat history
 if "history_ids" not in st.session_state:
     st.session_state.history_ids = None
+if "chat_log" not in st.session_state:
+    st.session_state.chat_log = []
 
-# ----------------- Chat Function -----------------
-def generate_reply(user_text):
-    # Encode user input and append to history
-    new_input_ids = tokenizer.encode(user_text + tokenizer.eos_token, return_tensors="pt").to(DEVICE)
+st.title("🤖 Local DialoGPT-small Chatbot — Offline")
 
-    # Append to history or start fresh
+# Get user input
+user_input = st.text_input("You:", key="input_text")
+
+# Handle user input
+if user_input:
+    # Encode user input
+    new_input_ids = tokenizer.encode(user_input + tokenizer.eos_token, return_tensors="pt").to(DEVICE)
+
+    # Append to history or start new
     if st.session_state.history_ids is not None:
         bot_input_ids = torch.cat([st.session_state.history_ids, new_input_ids], dim=-1)
     else:
         bot_input_ids = new_input_ids
 
-    # Generate response
+    # Generate reply
     st.session_state.history_ids = model.generate(
         bot_input_ids,
-        max_length=500,
-        pad_token_id=tokenizer.eos_token_id,
-        no_repeat_ngram_size=3,
-        do_sample=True,
-        top_k=50,
-        top_p=0.95,
-        temperature=0.7
+        max_length=1000,
+        pad_token_id=tokenizer.eos_token_id
     )
 
+    # Decode and display
     bot_reply = tokenizer.decode(st.session_state.history_ids[:, bot_input_ids.shape[-1]:][0], skip_special_tokens=True)
-    return bot_reply
+    st.session_state.chat_log.append(("You", user_input))
+    st.session_state.chat_log.append(("Bot", bot_reply))
 
-# ----------------- Input & Display -----------------
-user_input = st.text_input("You:", key="input_text")
+    # Clear text input for next turn
+    st.session_state.input_text = ""
 
-if st.button("Send") and user_input.strip():
-    bot_text = generate_reply(user_input)
-    st.session_state.chat_history.append(("You", user_input))
-    st.session_state.chat_history.append(("🤖 Bot", bot_text))
-    st.session_state.input_text = ""  # Clear input box
+# Display chat history
+for speaker, text in st.session_state.chat_log:
+    st.markdown(f"**{speaker}:** {text}")
 
-# Display chat
-for sender, text in st.session_state.chat_history:
-    st.markdown(f"**{sender}:** {text}")
 
 
 
