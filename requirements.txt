@@ -1,2 +1,5 @@
 streamlit
-nltk
+#nltk
+transformers 
+torch 
+accelerate
