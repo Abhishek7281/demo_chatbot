@@ -4,63 +4,68 @@ import streamlit as st
 from transformers import AutoModelForCausalLM, AutoTokenizer
 import torch
 
-# Load model and tokenizer once
+# ----------------- Settings -----------------
+MODEL_NAME = "microsoft/DialoGPT-small"  # small & faster for CPU
+DEVICE = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+
+# ----------------- Load Model -----------------
 @st.cache_resource
 def load_model():
-    model_name = "microsoft/DialoGPT-medium"
-    tokenizer = AutoTokenizer.from_pretrained(model_name)
-    model = AutoModelForCausalLM.from_pretrained(model_name)
+    tokenizer = AutoTokenizer.from_pretrained(MODEL_NAME)
+    model = AutoModelForCausalLM.from_pretrained(MODEL_NAME).to(DEVICE)
     return tokenizer, model
 
 tokenizer, model = load_model()
-DEVICE = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-model.to(DEVICE)
 
-# Initialize chat history
-if "chat_history_ids" not in st.session_state:
-    st.session_state.chat_history_ids = None
-if "past_user_inputs" not in st.session_state:
-    st.session_state.past_user_inputs = []
-if "generated_responses" not in st.session_state:
-    st.session_state.generated_responses = []
-
+# ----------------- App UI -----------------
+st.set_page_config(page_title="🤖 Local Transformer Chatbot", layout="centered")
 st.title("🤖 Local Transformer Chatbot — Offline")
-user_input = st.text_input("You:", "", key="input")
+st.write("Chat with a small local transformer model (DialoGPT-small) without internet or tokens.")
 
-if st.button("Send") and user_input:
-    # Encode the new user input, add to chat history
-    new_user_input_ids = tokenizer.encode(user_input + tokenizer.eos_token, return_tensors='pt').to(DEVICE)
+if "chat_history" not in st.session_state:
+    st.session_state.chat_history = []
+if "history_ids" not in st.session_state:
+    st.session_state.history_ids = None
 
-    # Append to history or start new
-    if st.session_state.chat_history_ids is not None:
-        bot_input_ids = torch.cat([st.session_state.chat_history_ids, new_user_input_ids], dim=-1)
+# ----------------- Chat Function -----------------
+def generate_reply(user_text):
+    # Encode user input and append to history
+    new_input_ids = tokenizer.encode(user_text + tokenizer.eos_token, return_tensors="pt").to(DEVICE)
+
+    # Append to history or start fresh
+    if st.session_state.history_ids is not None:
+        bot_input_ids = torch.cat([st.session_state.history_ids, new_input_ids], dim=-1)
     else:
-        bot_input_ids = new_user_input_ids
+        bot_input_ids = new_input_ids
 
-    # Generate a reply
-    st.session_state.chat_history_ids = model.generate(
+    # Generate response
+    st.session_state.history_ids = model.generate(
         bot_input_ids,
-        max_length=1000,
+        max_length=500,
         pad_token_id=tokenizer.eos_token_id,
+        no_repeat_ngram_size=3,
         do_sample=True,
         top_k=50,
-        top_p=0.95
+        top_p=0.95,
+        temperature=0.7
     )
 
-    # Decode only the newly generated tokens
-    bot_reply = tokenizer.decode(
-        st.session_state.chat_history_ids[:, bot_input_ids.shape[-1]:][0],
-        skip_special_tokens=True
-    )
+    bot_reply = tokenizer.decode(st.session_state.history_ids[:, bot_input_ids.shape[-1]:][0], skip_special_tokens=True)
+    return bot_reply
 
-    # Store conversation
-    st.session_state.past_user_inputs.append(user_input)
-    st.session_state.generated_responses.append(bot_reply)
+# ----------------- Input & Display -----------------
+user_input = st.text_input("You:", key="input_text")
 
-# Display conversation
-for user, bot in zip(st.session_state.past_user_inputs, st.session_state.generated_responses):
-    st.markdown(f"**You:** {user}")
-    st.markdown(f"**🤖 Bot:** {bot}")
+if st.button("Send") and user_input.strip():
+    bot_text = generate_reply(user_input)
+    st.session_state.chat_history.append(("You", user_input))
+    st.session_state.chat_history.append(("🤖 Bot", bot_text))
+    st.session_state.input_text = ""  # Clear input box
+
+# Display chat
+for sender, text in st.session_state.chat_history:
+    st.markdown(f"**{sender}:** {text}")
+
 
 
 # Simple chatbot
