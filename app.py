@@ -253,5 +253,5 @@ for sender, message in st.session_state.messages:
 if st.button("Clear Chat History"):
     st.session_state.messages = []
     save_history([])
-    st.experimental_rerun()
+    st.rerun()
 
