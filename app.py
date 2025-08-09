@@ -1,3 +1,41 @@
+# Got it — you just want to keep it fully factual Q&A using
+# distilbert-base-uncased-distilled-squad so it’s lighter, faster, and 100% offline.
+
+# Here’s the simplified Streamlit code without DialoGPT:
+import streamlit as st
+from transformers import pipeline
+
+# -------------------------
+# Load Model (cached)
+# -------------------------
+@st.cache_resource
+def load_qa_model():
+    return pipeline("question-answering", model="distilbert-base-uncased-distilled-squad")
+
+qa_pipeline = load_qa_model()
+
+# -------------------------
+# Streamlit App UI
+# -------------------------
+st.title("📚 Offline Q&A Chatbot (DistilBERT)")
+
+# Example context - can be replaced with your own dataset
+default_context = """
+New Delhi is the capital of India. It serves as the seat of all three branches of the Government of India.
+India is the seventh-largest country by land area and the most populous country in the world.
+The Taj Mahal is located in Agra, Uttar Pradesh.
+"""
+
+context_input = st.text_area("📄 Context:", default_context, height=150)
+user_input = st.text_input("❓ Your Question:", key="input_text")
+
+if st.button("Get Answer"):
+    if user_input.strip() and context_input.strip():
+        result = qa_pipeline(question=user_input, context=context_input)
+        st.markdown(f"**Answer:** {result['answer']}")
+
+
+
 # Alright — here’s a hybrid Streamlit chatbot that uses:
 
 # distilbert-base-uncased-distilled-squad for factual Q&A (extractive).
@@ -6,73 +44,73 @@
 
 # It detects whether the user’s input is a fact question or chat and routes it accordingly.
 
-import streamlit as st
-from transformers import pipeline, AutoModelForCausalLM, AutoTokenizer
-import torch
-import re
+# import streamlit as st
+# from transformers import pipeline, AutoModelForCausalLM, AutoTokenizer
+# import torch
+# import re
 
-# -------------------------
-# Load Models (cached)
-# -------------------------
-@st.cache_resource
-def load_qa_model():
-    return pipeline("question-answering", model="distilbert-base-uncased-distilled-squad")
+# # -------------------------
+# # Load Models (cached)
+# # -------------------------
+# @st.cache_resource
+# def load_qa_model():
+#     return pipeline("question-answering", model="distilbert-base-uncased-distilled-squad")
 
-@st.cache_resource
-def load_chat_model():
-    tokenizer = AutoTokenizer.from_pretrained("microsoft/DialoGPT-small")
-    model = AutoModelForCausalLM.from_pretrained("microsoft/DialoGPT-small")
-    return tokenizer, model
+# @st.cache_resource
+# def load_chat_model():
+#     tokenizer = AutoTokenizer.from_pretrained("microsoft/DialoGPT-small")
+#     model = AutoModelForCausalLM.from_pretrained("microsoft/DialoGPT-small")
+#     return tokenizer, model
 
-qa_pipeline = load_qa_model()
-chat_tokenizer, chat_model = load_chat_model()
+# qa_pipeline = load_qa_model()
+# chat_tokenizer, chat_model = load_chat_model()
 
-# -------------------------
-# Helper Functions
-# -------------------------
-def is_fact_question(user_input):
-    """
-    Simple rule-based detection for factual questions.
-    You can improve with NLP classifiers later.
-    """
-    fact_keywords = ["who", "what", "when", "where", "why", "how", "capital", "meaning", "name of", "population"]
-    return any(re.search(rf"\b{k}\b", user_input.lower()) for k in fact_keywords)
+# # -------------------------
+# # Helper Functions
+# # -------------------------
+# def is_fact_question(user_input):
+#     """
+#     Simple rule-based detection for factual questions.
+#     You can improve with NLP classifiers later.
+#     """
+#     fact_keywords = ["who", "what", "when", "where", "why", "how", "capital", "meaning", "name of", "population"]
+#     return any(re.search(rf"\b{k}\b", user_input.lower()) for k in fact_keywords)
 
-def chat_response(user_input, history_ids=None):
-    """Generate casual chat reply with DialoGPT."""
-    new_input_ids = chat_tokenizer.encode(user_input + chat_tokenizer.eos_token, return_tensors="pt")
-    if history_ids is not None:
-        bot_input_ids = torch.cat([history_ids, new_input_ids], dim=-1)
-    else:
-        bot_input_ids = new_input_ids
+# def chat_response(user_input, history_ids=None):
+#     """Generate casual chat reply with DialoGPT."""
+#     new_input_ids = chat_tokenizer.encode(user_input + chat_tokenizer.eos_token, return_tensors="pt")
+#     if history_ids is not None:
+#         bot_input_ids = torch.cat([history_ids, new_input_ids], dim=-1)
+#     else:
+#         bot_input_ids = new_input_ids
 
-    history_ids = chat_model.generate(bot_input_ids, max_length=1000, pad_token_id=chat_tokenizer.eos_token_id)
-    reply = chat_tokenizer.decode(history_ids[:, bot_input_ids.shape[-1]:][0], skip_special_tokens=True)
-    return reply, history_ids
+#     history_ids = chat_model.generate(bot_input_ids, max_length=1000, pad_token_id=chat_tokenizer.eos_token_id)
+#     reply = chat_tokenizer.decode(history_ids[:, bot_input_ids.shape[-1]:][0], skip_special_tokens=True)
+#     return reply, history_ids
 
-# -------------------------
-# Streamlit App UI
-# -------------------------
-st.title("💬 Hybrid Chatbot (QA + Chit-chat)")
+# # -------------------------
+# # Streamlit App UI
+# # -------------------------
+# st.title("💬 Hybrid Chatbot (QA + Chit-chat)")
 
-if "history_ids" not in st.session_state:
-    st.session_state.history_ids = None
+# if "history_ids" not in st.session_state:
+#     st.session_state.history_ids = None
 
-user_input = st.text_input("You:", key="input_text")
+# user_input = st.text_input("You:", key="input_text")
 
-if st.button("Send"):
-    if user_input.strip():
-        if is_fact_question(user_input):
-            # Use QA pipeline
-            # You can replace context with a large document or Wikipedia paragraph
-            context = """New Delhi is the capital of India. It serves as the seat of all three branches of the Government of India."""
-            result = qa_pipeline(question=user_input, context=context)
-            bot_reply = result['answer']
-        else:
-            # Use DialoGPT
-            bot_reply, st.session_state.history_ids = chat_response(user_input, st.session_state.history_ids)
+# if st.button("Send"):
+#     if user_input.strip():
+#         if is_fact_question(user_input):
+#             # Use QA pipeline
+#             # You can replace context with a large document or Wikipedia paragraph
+#             context = """New Delhi is the capital of India. It serves as the seat of all three branches of the Government of India."""
+#             result = qa_pipeline(question=user_input, context=context)
+#             bot_reply = result['answer']
+#         else:
+#             # Use DialoGPT
+#             bot_reply, st.session_state.history_ids = chat_response(user_input, st.session_state.history_ids)
 
-        st.markdown(f"**Bot:** {bot_reply}")
+#         st.markdown(f"**Bot:** {bot_reply}")
 
 # # chatbot_dialoGPT.py
 # import streamlit as st
