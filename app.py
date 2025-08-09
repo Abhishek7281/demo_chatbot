@@ -1,3 +1,115 @@
+# chatbot_dialoGPT.py
+import streamlit as st
+import os
+import pickle
+import torch
+from transformers import AutoModelForCausalLM, AutoTokenizer
+
+# ---------------- CONFIG ----------------
+MODEL_NAME = "microsoft/DialoGPT-medium"   # Chat-optimized small model
+CHAT_HISTORY_FILE = "chat_history_dialo.pkl"
+MAX_NEW_TOKENS = 150
+TEMPERATURE = 0.7
+TOP_P = 0.9
+REPETITION_PENALTY = 1.2
+DEVICE = "cuda" if torch.cuda.is_available() else "cpu"
+# -----------------------------------------
+
+st.set_page_config(page_title="Local DialoGPT Chatbot", layout="centered")
+st.title("🤖 Local DialoGPT-medium Chatbot — Offline")
+
+@st.cache_resource(show_spinner=True)
+def load_model_and_tokenizer(model_name):
+    """Load the model and tokenizer."""
+    tokenizer = AutoTokenizer.from_pretrained(model_name)
+    model = AutoModelForCausalLM.from_pretrained(model_name)
+    model.to(DEVICE)
+    model.eval()
+    return tokenizer, model
+
+def load_history():
+    if os.path.exists(CHAT_HISTORY_FILE):
+        try:
+            with open(CHAT_HISTORY_FILE, "rb") as f:
+                return pickle.load(f)
+        except Exception:
+            return []
+    return []
+
+def save_history(history):
+    with open(CHAT_HISTORY_FILE, "wb") as f:
+        pickle.dump(history, f)
+
+def generate_reply(tokenizer, model, history, user_input):
+    """Generate a reply from DialoGPT given the conversation history."""
+    # Encode user input and append end-of-sentence token
+    new_user_input_ids = tokenizer.encode(user_input + tokenizer.eos_token, return_tensors="pt").to(DEVICE)
+
+    # Append to history if exists
+    if history:
+        bot_input_ids = torch.cat([torch.LongTensor(history).to(DEVICE), new_user_input_ids], dim=-1)
+    else:
+        bot_input_ids = new_user_input_ids
+
+    # Generate reply
+    output_ids = model.generate(
+        bot_input_ids,
+        max_new_tokens=MAX_NEW_TOKENS,
+        temperature=TEMPERATURE,
+        top_p=TOP_P,
+        repetition_penalty=REPETITION_PENALTY,
+        pad_token_id=tokenizer.eos_token_id
+    )
+
+    # Extract generated tokens (excluding the input part)
+    reply_ids = output_ids[:, bot_input_ids.shape[-1]:]
+    reply_text = tokenizer.decode(reply_ids[0], skip_special_tokens=True)
+
+    # Update token history
+    history_ids = output_ids[:, :].tolist()[0]
+
+    return reply_text.strip(), history_ids
+
+# ---------------- LOAD ----------------
+tokenizer, model = load_model_and_tokenizer(MODEL_NAME)
+if "messages" not in st.session_state:
+    st.session_state.messages = load_history()
+if "token_history" not in st.session_state:
+    st.session_state.token_history = []
+
+# ---------------- UI ----------------
+with st.form(key="chat_form", clear_on_submit=True):
+    user_input = st.text_input("You:", placeholder="Type your message here...")
+    submitted = st.form_submit_button("Send")
+
+if submitted and user_input:
+    st.session_state.messages.append(("You", user_input))
+    with st.spinner("Generating..."):
+        bot_reply, updated_history_ids = generate_reply(
+            tokenizer, model,
+            st.session_state.token_history, user_input
+        )
+    st.session_state.messages.append(("Bot", bot_reply))
+    st.session_state.token_history = updated_history_ids
+    save_history(st.session_state.messages)
+
+# Display chat history
+for sender, message in st.session_state.messages:
+    if sender.lower().startswith("you"):
+        st.markdown(f"**You:** {message}")
+    else:
+        st.markdown(f"**🤖 Bot:** {message}")
+
+# Clear button
+if st.button("Clear Chat History"):
+    st.session_state.messages = []
+    st.session_state.token_history = []
+    save_history([])
+    st.rerun()
+
+# Footer
+st.caption(f"Model: {MODEL_NAME} | Device: {DEVICE}")
+
 # Simple chatbot
 # import streamlit as st
 
@@ -412,122 +524,122 @@
 
 
 #Chatgpt 5
-import streamlit as st
-import os
-import pickle
-import torch
-from transformers import AutoModelForCausalLM, AutoTokenizer, GenerationConfig
+# import streamlit as st
+# import os
+# import pickle
+# import torch
+# from transformers import AutoModelForCausalLM, AutoTokenizer, GenerationConfig
 
-# ---------- CONFIG ----------
-MODEL_NAME = "distilgpt2"   # Or local folder path for offline use
-CHAT_HISTORY_FILE = "chat_history_transformer.pkl"
-MAX_NEW_TOKENS = 128
-TEMPERATURE = 0.7
-TOP_P = 0.9
-DEVICE = "cuda" if torch.cuda.is_available() else "cpu"
-# ----------------------------
+# # ---------- CONFIG ----------
+# MODEL_NAME = "distilgpt2"   # Or local folder path for offline use
+# CHAT_HISTORY_FILE = "chat_history_transformer.pkl"
+# MAX_NEW_TOKENS = 128
+# TEMPERATURE = 0.7
+# TOP_P = 0.9
+# DEVICE = "cuda" if torch.cuda.is_available() else "cpu"
+# # ----------------------------
 
-st.set_page_config(page_title="Local Transformer Chatbot", layout="centered")
-st.title("🤖 Local Transformer Chatbot — Offline")
+# st.set_page_config(page_title="Local Transformer Chatbot", layout="centered")
+# st.title("🤖 Local Transformer Chatbot — Offline")
 
-@st.cache_resource(show_spinner=True)
-def load_model_and_tokenizer(model_name):
-    """Loads tokenizer & model (cached by Streamlit)."""
-    tokenizer = AutoTokenizer.from_pretrained(model_name, use_fast=True)
-    if tokenizer.pad_token is None:
-        tokenizer.pad_token = tokenizer.eos_token
-    model = AutoModelForCausalLM.from_pretrained(model_name)
-    model.to(DEVICE)
-    model.eval()
-    return tokenizer, model
+# @st.cache_resource(show_spinner=True)
+# def load_model_and_tokenizer(model_name):
+#     """Loads tokenizer & model (cached by Streamlit)."""
+#     tokenizer = AutoTokenizer.from_pretrained(model_name, use_fast=True)
+#     if tokenizer.pad_token is None:
+#         tokenizer.pad_token = tokenizer.eos_token
+#     model = AutoModelForCausalLM.from_pretrained(model_name)
+#     model.to(DEVICE)
+#     model.eval()
+#     return tokenizer, model
 
-def load_history():
-    if os.path.exists(CHAT_HISTORY_FILE):
-        try:
-            with open(CHAT_HISTORY_FILE, "rb") as f:
-                return pickle.load(f)
-        except Exception:
-            return []
-    return []
+# def load_history():
+#     if os.path.exists(CHAT_HISTORY_FILE):
+#         try:
+#             with open(CHAT_HISTORY_FILE, "rb") as f:
+#                 return pickle.load(f)
+#         except Exception:
+#             return []
+#     return []
 
-def save_history(history):
-    with open(CHAT_HISTORY_FILE, "wb") as f:
-        pickle.dump(history, f)
+# def save_history(history):
+#     with open(CHAT_HISTORY_FILE, "wb") as f:
+#         pickle.dump(history, f)
 
-# Build a conversation prompt with system message
-def build_prompt_from_history(history, user_message, max_turns=6):
-    system_prompt = "The following is a conversation between a helpful AI assistant and a user.\n"
-    turns = []
-    pairs = []
-    i = 0
-    while i < len(history):
-        if history[i][0].lower().startswith("you"):
-            user = history[i][1]
-            bot = history[i+1][1] if i+1 < len(history) and history[i+1][0].lower().startswith("bot") else ""
-            pairs.append((user, bot))
-            i += 2
-        else:
-            i += 1
-    pairs = pairs[-max_turns:]
-    for u, b in pairs:
-        turns.append(f"User: {u}\nAI: {b}")
-    turns.append(f"User: {user_message}\nAI:")
-    return system_prompt + "\n".join(turns)
+# # Build a conversation prompt with system message
+# def build_prompt_from_history(history, user_message, max_turns=6):
+#     system_prompt = "The following is a conversation between a helpful AI assistant and a user.\n"
+#     turns = []
+#     pairs = []
+#     i = 0
+#     while i < len(history):
+#         if history[i][0].lower().startswith("you"):
+#             user = history[i][1]
+#             bot = history[i+1][1] if i+1 < len(history) and history[i+1][0].lower().startswith("bot") else ""
+#             pairs.append((user, bot))
+#             i += 2
+#         else:
+#             i += 1
+#     pairs = pairs[-max_turns:]
+#     for u, b in pairs:
+#         turns.append(f"User: {u}\nAI: {b}")
+#     turns.append(f"User: {user_message}\nAI:")
+#     return system_prompt + "\n".join(turns)
 
-# Generate reply using local model
-def generate_reply(tokenizer, model, prompt):
-    inputs = tokenizer(prompt, return_tensors="pt", truncation=True, max_length=1024).to(DEVICE)
-    gen_config = GenerationConfig(
-        temperature=TEMPERATURE,
-        top_p=TOP_P,
-        do_sample=True,
-        max_new_tokens=MAX_NEW_TOKENS,
-        pad_token_id=tokenizer.pad_token_id,
-        eos_token_id=tokenizer.eos_token_id,
-    )
-    with torch.no_grad():
-        out = model.generate(**inputs, **gen_config.__dict__)
-    generated_text = tokenizer.decode(out[0], skip_special_tokens=True)
-    # Remove prompt portion from output
-    if generated_text.startswith(prompt):
-        reply = generated_text[len(prompt):].strip()
-    else:
-        reply = generated_text.strip()
-    # Stop at double newlines to avoid trailing content
-    reply = reply.split("\n\n")[0].strip()
-    return reply if reply else "(No response generated)"
+# # Generate reply using local model
+# def generate_reply(tokenizer, model, prompt):
+#     inputs = tokenizer(prompt, return_tensors="pt", truncation=True, max_length=1024).to(DEVICE)
+#     gen_config = GenerationConfig(
+#         temperature=TEMPERATURE,
+#         top_p=TOP_P,
+#         do_sample=True,
+#         max_new_tokens=MAX_NEW_TOKENS,
+#         pad_token_id=tokenizer.pad_token_id,
+#         eos_token_id=tokenizer.eos_token_id,
+#     )
+#     with torch.no_grad():
+#         out = model.generate(**inputs, **gen_config.__dict__)
+#     generated_text = tokenizer.decode(out[0], skip_special_tokens=True)
+#     # Remove prompt portion from output
+#     if generated_text.startswith(prompt):
+#         reply = generated_text[len(prompt):].strip()
+#     else:
+#         reply = generated_text.strip()
+#     # Stop at double newlines to avoid trailing content
+#     reply = reply.split("\n\n")[0].strip()
+#     return reply if reply else "(No response generated)"
 
-# Load model & chat history
-tokenizer, model = load_model_and_tokenizer(MODEL_NAME)
-if "messages" not in st.session_state:
-    st.session_state.messages = load_history()
+# # Load model & chat history
+# tokenizer, model = load_model_and_tokenizer(MODEL_NAME)
+# if "messages" not in st.session_state:
+#     st.session_state.messages = load_history()
 
-# Input form
-with st.form(key="input_form", clear_on_submit=True):
-    user_input = st.text_input("You:", placeholder="Type your message here...")
-    submit = st.form_submit_button("Send")
+# # Input form
+# with st.form(key="input_form", clear_on_submit=True):
+#     user_input = st.text_input("You:", placeholder="Type your message here...")
+#     submit = st.form_submit_button("Send")
 
-if submit and user_input:
-    st.session_state.messages.append(("You", user_input))
-    prompt = build_prompt_from_history(st.session_state.messages, user_input)
-    with st.spinner("Generating..."):
-        bot_reply = generate_reply(tokenizer, model, prompt)
-    st.session_state.messages.append(("Bot", bot_reply))
-    save_history(st.session_state.messages)
+# if submit and user_input:
+#     st.session_state.messages.append(("You", user_input))
+#     prompt = build_prompt_from_history(st.session_state.messages, user_input)
+#     with st.spinner("Generating..."):
+#         bot_reply = generate_reply(tokenizer, model, prompt)
+#     st.session_state.messages.append(("Bot", bot_reply))
+#     save_history(st.session_state.messages)
 
-# Display chat history
-for sender, message in st.session_state.messages:
-    if sender.lower().startswith("you"):
-        st.markdown(f"**You:** {message}")
-    else:
-        st.markdown(f"**🤖 Bot:** {message}")
+# # Display chat history
+# for sender, message in st.session_state.messages:
+#     if sender.lower().startswith("you"):
+#         st.markdown(f"**You:** {message}")
+#     else:
+#         st.markdown(f"**🤖 Bot:** {message}")
 
-# Clear chat button
-if st.button("Clear Chat History"):
-    st.session_state.messages = []
-    save_history([])
-    st.rerun()
+# # Clear chat button
+# if st.button("Clear Chat History"):
+#     st.session_state.messages = []
+#     save_history([])
+#     st.rerun()
 
-# Footer info
-st.caption(f"Model: {MODEL_NAME} | Device: {DEVICE} | max_new_tokens: {MAX_NEW_TOKENS}")
+# # Footer info
+# st.caption(f"Model: {MODEL_NAME} | Device: {DEVICE} | max_new_tokens: {MAX_NEW_TOKENS}")
 
