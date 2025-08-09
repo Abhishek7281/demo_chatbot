@@ -1,114 +1,67 @@
-# chatbot_dialoGPT.py
+
+# # chatbot_dialoGPT.py
 import streamlit as st
-import os
-import pickle
-import torch
 from transformers import AutoModelForCausalLM, AutoTokenizer
+import torch
 
-# ---------------- CONFIG ----------------
-MODEL_NAME = "microsoft/DialoGPT-medium"   # Chat-optimized small model
-CHAT_HISTORY_FILE = "chat_history_dialo.pkl"
-MAX_NEW_TOKENS = 150
-TEMPERATURE = 0.7
-TOP_P = 0.9
-REPETITION_PENALTY = 1.2
-DEVICE = "cuda" if torch.cuda.is_available() else "cpu"
-# -----------------------------------------
-
-st.set_page_config(page_title="Local DialoGPT Chatbot", layout="centered")
-st.title("🤖 Local DialoGPT-medium Chatbot — Offline")
-
-@st.cache_resource(show_spinner=True)
-def load_model_and_tokenizer(model_name):
-    """Load the model and tokenizer."""
+# Load model and tokenizer once
+@st.cache_resource
+def load_model():
+    model_name = "microsoft/DialoGPT-medium"
     tokenizer = AutoTokenizer.from_pretrained(model_name)
     model = AutoModelForCausalLM.from_pretrained(model_name)
-    model.to(DEVICE)
-    model.eval()
     return tokenizer, model
 
-def load_history():
-    if os.path.exists(CHAT_HISTORY_FILE):
-        try:
-            with open(CHAT_HISTORY_FILE, "rb") as f:
-                return pickle.load(f)
-        except Exception:
-            return []
-    return []
+tokenizer, model = load_model()
+DEVICE = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+model.to(DEVICE)
 
-def save_history(history):
-    with open(CHAT_HISTORY_FILE, "wb") as f:
-        pickle.dump(history, f)
+# Initialize chat history
+if "chat_history_ids" not in st.session_state:
+    st.session_state.chat_history_ids = None
+if "past_user_inputs" not in st.session_state:
+    st.session_state.past_user_inputs = []
+if "generated_responses" not in st.session_state:
+    st.session_state.generated_responses = []
 
-def generate_reply(tokenizer, model, history, user_input):
-    """Generate a reply from DialoGPT given the conversation history."""
-    # Encode user input and append end-of-sentence token
-    new_user_input_ids = tokenizer.encode(user_input + tokenizer.eos_token, return_tensors="pt").to(DEVICE)
+st.title("🤖 Local Transformer Chatbot — Offline")
+user_input = st.text_input("You:", "", key="input")
 
-    # Append to history if exists
-    if history:
-        bot_input_ids = torch.cat([torch.LongTensor(history).to(DEVICE), new_user_input_ids], dim=-1)
+if st.button("Send") and user_input:
+    # Encode the new user input, add to chat history
+    new_user_input_ids = tokenizer.encode(user_input + tokenizer.eos_token, return_tensors='pt').to(DEVICE)
+
+    # Append to history or start new
+    if st.session_state.chat_history_ids is not None:
+        bot_input_ids = torch.cat([st.session_state.chat_history_ids, new_user_input_ids], dim=-1)
     else:
         bot_input_ids = new_user_input_ids
 
-    # Generate reply
-    output_ids = model.generate(
+    # Generate a reply
+    st.session_state.chat_history_ids = model.generate(
         bot_input_ids,
-        max_new_tokens=MAX_NEW_TOKENS,
-        temperature=TEMPERATURE,
-        top_p=TOP_P,
-        repetition_penalty=REPETITION_PENALTY,
-        pad_token_id=tokenizer.eos_token_id
+        max_length=1000,
+        pad_token_id=tokenizer.eos_token_id,
+        do_sample=True,
+        top_k=50,
+        top_p=0.95
     )
 
-    # Extract generated tokens (excluding the input part)
-    reply_ids = output_ids[:, bot_input_ids.shape[-1]:]
-    reply_text = tokenizer.decode(reply_ids[0], skip_special_tokens=True)
+    # Decode only the newly generated tokens
+    bot_reply = tokenizer.decode(
+        st.session_state.chat_history_ids[:, bot_input_ids.shape[-1]:][0],
+        skip_special_tokens=True
+    )
 
-    # Update token history
-    history_ids = output_ids[:, :].tolist()[0]
+    # Store conversation
+    st.session_state.past_user_inputs.append(user_input)
+    st.session_state.generated_responses.append(bot_reply)
 
-    return reply_text.strip(), history_ids
+# Display conversation
+for user, bot in zip(st.session_state.past_user_inputs, st.session_state.generated_responses):
+    st.markdown(f"**You:** {user}")
+    st.markdown(f"**🤖 Bot:** {bot}")
 
-# ---------------- LOAD ----------------
-tokenizer, model = load_model_and_tokenizer(MODEL_NAME)
-if "messages" not in st.session_state:
-    st.session_state.messages = load_history()
-if "token_history" not in st.session_state:
-    st.session_state.token_history = []
-
-# ---------------- UI ----------------
-with st.form(key="chat_form", clear_on_submit=True):
-    user_input = st.text_input("You:", placeholder="Type your message here...")
-    submitted = st.form_submit_button("Send")
-
-if submitted and user_input:
-    st.session_state.messages.append(("You", user_input))
-    with st.spinner("Generating..."):
-        bot_reply, updated_history_ids = generate_reply(
-            tokenizer, model,
-            st.session_state.token_history, user_input
-        )
-    st.session_state.messages.append(("Bot", bot_reply))
-    st.session_state.token_history = updated_history_ids
-    save_history(st.session_state.messages)
-
-# Display chat history
-for sender, message in st.session_state.messages:
-    if sender.lower().startswith("you"):
-        st.markdown(f"**You:** {message}")
-    else:
-        st.markdown(f"**🤖 Bot:** {message}")
-
-# Clear button
-if st.button("Clear Chat History"):
-    st.session_state.messages = []
-    st.session_state.token_history = []
-    save_history([])
-    st.rerun()
-
-# Footer
-st.caption(f"Model: {MODEL_NAME} | Device: {DEVICE}")
 
 # Simple chatbot
 # import streamlit as st
