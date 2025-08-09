@@ -1,60 +1,135 @@
+# Alright — here’s a hybrid Streamlit chatbot that uses:
 
-# # chatbot_dialoGPT.py
+# distilbert-base-uncased-distilled-squad for factual Q&A (extractive).
+
+# microsoft/DialoGPT-small for casual chit-chat.
+
+# It detects whether the user’s input is a fact question or chat and routes it accordingly.
+
 import streamlit as st
-from transformers import AutoModelForCausalLM, AutoTokenizer
+from transformers import pipeline, AutoModelForCausalLM, AutoTokenizer
 import torch
+import re
 
-# Load DialoGPT-small for faster CPU inference
+# -------------------------
+# Load Models (cached)
+# -------------------------
 @st.cache_resource
-def load_model():
+def load_qa_model():
+    return pipeline("question-answering", model="distilbert-base-uncased-distilled-squad")
+
+@st.cache_resource
+def load_chat_model():
     tokenizer = AutoTokenizer.from_pretrained("microsoft/DialoGPT-small")
     model = AutoModelForCausalLM.from_pretrained("microsoft/DialoGPT-small")
     return tokenizer, model
 
-tokenizer, model = load_model()
+qa_pipeline = load_qa_model()
+chat_tokenizer, chat_model = load_chat_model()
 
-# Session state for chat history
-if "history" not in st.session_state:
-    st.session_state.history = []
+# -------------------------
+# Helper Functions
+# -------------------------
+def is_fact_question(user_input):
+    """
+    Simple rule-based detection for factual questions.
+    You can improve with NLP classifiers later.
+    """
+    fact_keywords = ["who", "what", "when", "where", "why", "how", "capital", "meaning", "name of", "population"]
+    return any(re.search(rf"\b{k}\b", user_input.lower()) for k in fact_keywords)
 
-if "input_text" not in st.session_state:
-    st.session_state.input_text = ""
-
-# Function to handle sending a message
-def send_message():
-    user_message = st.session_state.input_text.strip()
-    if user_message:
-        st.session_state.history.append({"role": "user", "text": user_message})
-        
-        # Tokenize and generate response
-        new_input_ids = tokenizer.encode(user_message + tokenizer.eos_token, return_tensors='pt')
-        bot_input_ids = torch.cat([st.session_state.get("chat_history_ids", torch.tensor([])), new_input_ids], dim=-1) if st.session_state.get("chat_history_ids") is not None else new_input_ids
-        
-        st.session_state.chat_history_ids = model.generate(
-            bot_input_ids, max_length=1000,
-            pad_token_id=tokenizer.eos_token_id
-        )
-        
-        bot_reply = tokenizer.decode(
-            st.session_state.chat_history_ids[:, bot_input_ids.shape[-1]:][0],
-            skip_special_tokens=True
-        )
-        st.session_state.history.append({"role": "bot", "text": bot_reply})
-    
-    # Clear input box after sending
-    st.session_state.input_text = ""
-
-# UI
-st.title("💬 Lightweight Chatbot (DialoGPT-small)")
-
-for chat in st.session_state.history:
-    if chat["role"] == "user":
-        st.markdown(f"**You:** {chat['text']}")
+def chat_response(user_input, history_ids=None):
+    """Generate casual chat reply with DialoGPT."""
+    new_input_ids = chat_tokenizer.encode(user_input + chat_tokenizer.eos_token, return_tensors="pt")
+    if history_ids is not None:
+        bot_input_ids = torch.cat([history_ids, new_input_ids], dim=-1)
     else:
-        st.markdown(f"**Bot:** {chat['text']}")
+        bot_input_ids = new_input_ids
 
-# Input box + send button with callback
-st.text_input("Type your message:", key="input_text", on_change=send_message)
+    history_ids = chat_model.generate(bot_input_ids, max_length=1000, pad_token_id=chat_tokenizer.eos_token_id)
+    reply = chat_tokenizer.decode(history_ids[:, bot_input_ids.shape[-1]:][0], skip_special_tokens=True)
+    return reply, history_ids
+
+# -------------------------
+# Streamlit App UI
+# -------------------------
+st.title("💬 Hybrid Chatbot (QA + Chit-chat)")
+
+if "history_ids" not in st.session_state:
+    st.session_state.history_ids = None
+
+user_input = st.text_input("You:", key="input_text")
+
+if st.button("Send"):
+    if user_input.strip():
+        if is_fact_question(user_input):
+            # Use QA pipeline
+            # You can replace context with a large document or Wikipedia paragraph
+            context = """New Delhi is the capital of India. It serves as the seat of all three branches of the Government of India."""
+            result = qa_pipeline(question=user_input, context=context)
+            bot_reply = result['answer']
+        else:
+            # Use DialoGPT
+            bot_reply, st.session_state.history_ids = chat_response(user_input, st.session_state.history_ids)
+
+        st.markdown(f"**Bot:** {bot_reply}")
+
+# # chatbot_dialoGPT.py
+# import streamlit as st
+# from transformers import AutoModelForCausalLM, AutoTokenizer
+# import torch
+
+# # Load DialoGPT-small for faster CPU inference
+# @st.cache_resource
+# def load_model():
+#     tokenizer = AutoTokenizer.from_pretrained("microsoft/DialoGPT-small")
+#     model = AutoModelForCausalLM.from_pretrained("microsoft/DialoGPT-small")
+#     return tokenizer, model
+
+# tokenizer, model = load_model()
+
+# # Session state for chat history
+# if "history" not in st.session_state:
+#     st.session_state.history = []
+
+# if "input_text" not in st.session_state:
+#     st.session_state.input_text = ""
+
+# # Function to handle sending a message
+# def send_message():
+#     user_message = st.session_state.input_text.strip()
+#     if user_message:
+#         st.session_state.history.append({"role": "user", "text": user_message})
+        
+#         # Tokenize and generate response
+#         new_input_ids = tokenizer.encode(user_message + tokenizer.eos_token, return_tensors='pt')
+#         bot_input_ids = torch.cat([st.session_state.get("chat_history_ids", torch.tensor([])), new_input_ids], dim=-1) if st.session_state.get("chat_history_ids") is not None else new_input_ids
+        
+#         st.session_state.chat_history_ids = model.generate(
+#             bot_input_ids, max_length=1000,
+#             pad_token_id=tokenizer.eos_token_id
+#         )
+        
+#         bot_reply = tokenizer.decode(
+#             st.session_state.chat_history_ids[:, bot_input_ids.shape[-1]:][0],
+#             skip_special_tokens=True
+#         )
+#         st.session_state.history.append({"role": "bot", "text": bot_reply})
+    
+#     # Clear input box after sending
+#     st.session_state.input_text = ""
+
+# # UI
+# st.title("💬 Lightweight Chatbot (DialoGPT-small)")
+
+# for chat in st.session_state.history:
+#     if chat["role"] == "user":
+#         st.markdown(f"**You:** {chat['text']}")
+#     else:
+#         st.markdown(f"**Bot:** {chat['text']}")
+
+# # Input box + send button with callback
+# st.text_input("Type your message:", key="input_text", on_change=send_message)
 
 
 
